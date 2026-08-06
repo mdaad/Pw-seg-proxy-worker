@@ -61,6 +61,11 @@ ENABLE_DOWNLOAD  = True
 DOWNLOAD_OFF_MSG = "Download feature is Currently off Due to Server Heavy load."
 PLAY_OFF_MSG     = "Video playback is temporarily disabled."
 
+# ⚠️ TEMPORARY FALLBACK - HATA DETA BAAD ME
+FALLBACK_AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtb2JpbGUiOiI5MjQzOTExMjc5IiwibmFtZSI6IkFrcml0aSBUaXdhcmkiLCJpYXQiOjE3ODU4MzU2MTUsImV4cCI6MTc5MzYxMTYxNX0.CcItM2KpPyd6_vjwhPvZpyATz-otOnix5j2q2B2cnrg"
+
+
+
 # ── THREAD POOL for parallel tasks ───────────────────────────
 _executor = ThreadPoolExecutor(max_workers=8)
 
@@ -466,6 +471,19 @@ class PWAPI:
         self.current_phone = None
         self.batch_cache = {}
         self._lock       = threading.Lock()
+    
+    def refresh_session_fallback(self):
+        """Temporary fallback when DB sessions are invalid"""
+        with self._lock:
+            self.cookies = {
+                "auth_token": FALLBACK_AUTH_TOKEN
+            }
+            self.user = {
+                "name": "forced_fallback",
+                "mobile": "9999999999"
+            }
+            self.current_phone = "forced_fallback"
+        print("⚠️ Using forced fallback auth token")    
 
     def load_random_session(self):
         all_sessions = [x for x in _load_sessions() if x.get("cookies")]
@@ -502,9 +520,13 @@ class PWAPI:
                 "Origin":       "https://pwthor.live",
                 "Referer":      "https://pwthor.live/study/batches"
             }
+            
             with self._lock:
                 if self.cookies:
                     h["Cookie"] = "; ".join(f"{k}={v}" for k,v in self.cookies.items())
+                    auth_token = self.cookies.get("auth_token", "").strip()
+                    if auth_token:
+                        h["Authorization"] = f"Bearer {auth_token}"
             if extra_headers: h.update(extra_headers)
             payload = json.dumps(data).encode() if data else None
             resp    = make_request(url, h, 30, payload, method)
@@ -747,6 +769,7 @@ class PWAPI:
 api = PWAPI()
 if not api.load_random_session():
     print("⚠️ No valid sessions")
+    api.refresh_session_fallback()
 
 # ── SESSION STORE ─────────────────────────────────────────────
 SESSIONS      = {}
